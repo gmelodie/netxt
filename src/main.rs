@@ -8,10 +8,6 @@ use std::{error, result};
 
 type Result<T> = result::Result<T, Box<dyn error::Error>>;
 
-// macro_rules! err {
-//     ($($tt:tt)*) => { Err(Box::<dyn error::Error>::from(format!($($tt)*))) };
-// }
-
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
@@ -37,9 +33,7 @@ fn main() -> Result<()> {
             Ok(())
         }
         Commands::Parse { todo_file } => {
-            // get last day
-            // if last day is before today: create today
-            // if last day is after today: what the fuck?
+            let _todo = Todo::load(todo_file)?;
             println!("parsing {:?}", todo_file);
             Ok(())
         }

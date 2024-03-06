@@ -1,20 +1,25 @@
 use chrono::{Local, NaiveDate};
 use std::env;
-use std::fs::File;
+use std::fs::read_to_string;
+use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
 use std::{error, result};
 
+macro_rules! err {
+    ($($tt:tt)*) => { Err(Box::<dyn error::Error>::from(format!($($tt)*))) };
+}
+
 type Result<T> = result::Result<T, Box<dyn error::Error>>;
 
 /// Todo is NOT timezone-aware
+// TODO: implement Read and Write for Todo
+// Local::now().format("[%Y-%m-%d]")
+// parse_from_str(string, "[%Y-%m-%d]")
 pub struct Todo {
     last_day: NaiveDate, // last day
     file_path: PathBuf,  // last day
 }
-
-// Local::now().format("%d-%m-%Y")
-// parse_from_str(string, "%d-%m-%Y")
 
 fn today() -> NaiveDate {
     // Current local time
@@ -23,6 +28,7 @@ fn today() -> NaiveDate {
     // Current local date
     now.date_naive()
 }
+
 impl Todo {
     pub fn new() -> Result<Todo> {
         let todo = Todo {
@@ -34,15 +40,38 @@ impl Todo {
 
     pub fn save(&self) -> Result<()> {
         // TODO: check if file is up to date, if so, don't save
-        let mut f = if self.file_path.exists() {
-            File::open(&self.file_path)?
-        } else {
-            // if file doesn't exist, create it
-            File::create(&self.file_path)?
-        };
+        let mut f = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .append(true)
+            .open(&self.file_path)?;
         // TODO: implement Display for NaiveDate
-        // TODO: implement Read
-        f.write_all(self.last_day.format("[%d %m %Y]").to_string().as_bytes())?;
+        // TODO: check if current date is already present in file
+        f.write_all(self.last_day.format("[%Y-%m-%d]\n").to_string().as_bytes())
+            .unwrap();
         Ok(())
     }
+
+    pub fn load(todo_file: &PathBuf) -> Result<Todo> {
+        let last_day = get_last_day(todo_file)?;
+        if last_day > today() {
+            return err!("Invalid date: date on file is ahead of today");
+        }
+        Ok(Todo {
+            last_day,
+            file_path: todo_file.into(),
+        })
+    }
+}
+
+fn get_last_day(todo_file: &PathBuf) -> Result<NaiveDate> {
+    for line in read_to_string(todo_file)?.lines().rev() {
+        if let Some(first_char) = line.chars().next() {
+            if first_char == '[' {
+                let date = NaiveDate::parse_from_str(line, "[%Y-%m-%d]\n")?;
+                return Ok(date);
+            }
+        }
+    }
+    err!("No lines matching date sytax")
 }
