@@ -10,3 +10,4 @@ authors = ["Gabriel Cruz <gabrieldemelocruz@gmail.com>"]
 chrono = "0.4.34"
 clap = { version = "4.5.1", features = ["derive"] }
 indoc = "2.0.4"
+tempfile = "3.10.1"
