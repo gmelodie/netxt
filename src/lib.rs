@@ -1,8 +1,13 @@
 //! Todo is NOT timezone-aware
 
+use itertools::Itertools;
+use std::error;
+use std::fmt;
+use std::fs::read_to_string;
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::Path;
+use std::str;
 
 mod day;
 mod section;
@@ -11,47 +16,87 @@ mod util;
 
 use util::*;
 
-use day::Day;
+use day::{Day, DayIterator};
 
-// TODO: implement Read and Write for Todo
-
-#[derive(PartialEq, Debug)]
-pub struct Todo {
-    today: Day,
-    days: Vec<Day>, // does not contain today, only contains days that are finished
-    file_path: PathBuf,
+macro_rules! err {
+    ($($tt:tt)*) => { Err(Box::<dyn error::Error>::from(format!($($tt)*))) };
 }
 
-impl Todo {
-    pub fn new(path: &str) -> Result<Todo> {
+#[derive(PartialEq, Debug)]
+pub struct Todo<'a> {
+    today: Day,
+    days: Vec<Day>, // does not contain today, only contains days that are finished
+    file_path: &'a Path,
+}
+
+impl<'a> Todo<'a> {
+    pub fn new() -> Result<Todo<'a>> {
         let todo = Todo {
             today: Day::new(today()),
             days: Vec::<Day>::new(),
-            file_path: path.into(),
+            file_path: &Path::new(""),
         };
         Ok(todo)
     }
 
     pub fn save(&self) -> Result<()> {
-        // TODO: check if file is up to date, if so, don't save
+        if let Some(last_day_in_file) = get_last_day(self.file_path) {
+            if last_day_in_file > today() {
+                return err!("Invalid date: date on file is ahead of today");
+            }
+        }
+
+        // don't save if file is up to date
+        let file_todo = Todo::load(self.file_path)?;
+        if file_todo == *self {
+            return Ok(()); // maybe want to return Err here?
+        }
+
         let mut f = OpenOptions::new()
             .write(true)
             .create(true)
             .append(true)
             .open(&self.file_path)?;
-        // TODO: implement Display for NaiveDate
-        // TODO: check if current date is already present in file
-        f.write_all(self.last_day.format("[%Y-%m-%d]\n").to_string().as_bytes())
-            .unwrap();
+        f.write_all(format!("{self}").as_bytes())?;
         Ok(())
     }
 
-    pub fn load(todo_file: &PathBuf) -> Result<Todo> {
-        let last_day = get_last_day(todo_file)?;
-        if last_day > today() {
-            return err!("Invalid date: date on file is ahead of today");
+    pub fn load(todo_file: &Path) -> Result<Todo> {
+        if let Some(last_day) = get_last_day(todo_file) {
+            if last_day > today() {
+                return err!("Invalid date: date on file is ahead of today");
+            }
         }
-        Ok(Todo::new(todo_file))
+        let mut todo: Todo = read_to_string(&todo_file)
+            .expect("Unable to read file")
+            .parse()
+            .expect("Unable to parse file contents");
+        todo.file_path = todo_file;
+        Ok(todo)
+    }
+}
+
+impl<'a> str::FromStr for Todo<'a> {
+    type Err = Box<dyn error::Error>;
+    fn from_str(s: &str) -> Result<Self> {
+        let text = s.trim().to_string();
+        let mut days: Vec<Day> = Vec::new();
+        let day_iter = DayIterator::new(&text);
+        for day in day_iter {
+            days.push(day);
+        }
+        Ok(Todo {
+            today: Day::new(today()),
+            days,
+            file_path: &Path::new(""), // no path to give, is this an issue?
+        })
+    }
+}
+
+impl<'a> fmt::Display for Todo<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let days = self.days.iter().join("\n");
+        write!(f, "{days}")
     }
 }
 
@@ -63,7 +108,7 @@ mod tests {
 
     use chrono::NaiveDate;
     use indoc::indoc;
-    use std::fs::read_to_string;
+    use std::io::Write;
     use tempfile::NamedTempFile;
 
     /// Creates a tmp file with string contents and return the file path
@@ -94,7 +139,7 @@ mod tests {
         "}
             .to_string(),
         );
-        let path = file.path().to_path_buf();
+        let path = file.path();
         let expected = Todo {
             today: Day::new(today()),
             file_path: path,
@@ -150,13 +195,84 @@ mod tests {
 
         let actual = Todo::load(&path).expect("Unable to load file");
         assert_eq!(actual, expected);
+    }
 
-        let actual2: Todo = read_to_string(&path)
-            .expect("Unable to read file")
-            .parse()
-            .expect("Unable to parse file contents");
-        assert_eq!(actual2, expected);
+    #[test]
+    fn save_todo() {
+        let expected = indoc! {"
+            [2024-03-06]
+            Section 1
+            - task 1
+            - task 3
+            - task 2
+            Done
+
+            [2024-03-07]
+            Section 2
+            - task 11
+            - task 31
+            - task 21
+            Done
+        "};
+
+        let file = NamedTempFile::new().expect("Unable to create tmp file");
+        let path = file.path();
+        let todo = Todo {
+            today: Day::new(today()),
+            file_path: path,
+            days: vec![
+                Day {
+                    date: NaiveDate::from_ymd_opt(2024, 3, 6).unwrap(),
+                    sections: vec![
+                        Section {
+                            name: "Section 1".to_string(),
+                            tasks: vec![
+                                Task {
+                                    text: "task 1".to_string(),
+                                },
+                                Task {
+                                    text: "task 3".to_string(),
+                                },
+                                Task {
+                                    text: "task 2".to_string(),
+                                },
+                            ],
+                        },
+                        Section {
+                            name: "Done".to_string(),
+                            tasks: vec![],
+                        },
+                    ],
+                },
+                Day {
+                    date: NaiveDate::from_ymd_opt(2024, 3, 7).unwrap(),
+                    sections: vec![
+                        Section {
+                            name: "Section 2".to_string(),
+                            tasks: vec![
+                                Task {
+                                    text: "task 11".to_string(),
+                                },
+                                Task {
+                                    text: "task 31".to_string(),
+                                },
+                                Task {
+                                    text: "task 21".to_string(),
+                                },
+                            ],
+                        },
+                        Section {
+                            name: "Done".to_string(),
+                            tasks: vec![],
+                        },
+                    ],
+                },
+            ],
+        };
+
+        let _ = todo.save().expect("Unable to load file");
+
+        let actual = read_to_string(&path).expect("Unable to read file");
+        assert_eq!(actual, expected);
     }
 }
-
-//TODO: a day can have tasks that are in anonymous section

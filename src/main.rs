@@ -16,7 +16,7 @@ struct Cli {
 enum Commands {
     /// Create new todo file
     Init,
-    /// Parse existing TODO file
+    /// Parse existing todo file
     Parse { todo_file: PathBuf },
 }
 
