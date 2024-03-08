@@ -18,7 +18,12 @@ enum Commands {
     /// Create new todo file
     Init,
     /// Parse existing todo file
-    Parse { todo_file: PathBuf },
+    Parse {
+        todo_file: PathBuf,
+    },
+    Add {
+        task: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -30,6 +35,10 @@ fn main() -> Result<()> {
             Ok(())
         }
         Commands::Parse { todo_file } => {
+            let _todo = Todo::load(todo_file)?;
+            Ok(())
+        }
+        Commands::Add { task } => {
             let _todo = Todo::load(todo_file)?;
             Ok(())
         }

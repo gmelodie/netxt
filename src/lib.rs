@@ -30,7 +30,7 @@ pub struct Todo<'a> {
 }
 
 impl<'a> Todo<'a> {
-    pub fn new() -> Result<Todo<'a>> {
+    pub fn new(path: &str) -> Result<Todo<'a>> {
         let todo = Todo {
             today: Day::new(today()),
             days: Vec::<Day>::new(),
