@@ -1,7 +1,8 @@
 use clap::{Parser, Subcommand};
-use net::Todo;
 use std::path::PathBuf;
 use std::{error, result};
+
+use netxt::Todo;
 
 type Result<T> = result::Result<T, Box<dyn error::Error>>;
 
