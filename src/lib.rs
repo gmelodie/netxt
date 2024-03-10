@@ -1,6 +1,7 @@
 //! Todo is NOT timezone-aware
 
 use itertools::Itertools;
+use section::Section;
 use std::error;
 use std::fmt;
 use std::fs::read_to_string;
@@ -17,24 +18,26 @@ mod util;
 use util::*;
 
 use day::{Day, DayIterator};
+use task::Task;
 
 macro_rules! err {
     ($($tt:tt)*) => { Err(Box::<dyn error::Error>::from(format!($($tt)*))) };
 }
 
-#[derive(PartialEq, Debug)]
-pub struct Todo<'a> {
+#[derive(PartialEq, Debug, Clone)]
+pub struct Todo<'todo_life> {
     today: Day,
     days: Vec<Day>, // does not contain today, only contains days that are finished
-    file_path: &'a Path,
+    file_path: &'todo_life Path,
 }
 
-impl<'a> Todo<'a> {
-    pub fn new(path: &str) -> Result<Todo<'a>> {
+impl<'todo_life> Todo<'todo_life> {
+    pub fn new(path: Option<&'todo_life str>) -> Result<Todo<'todo_life>> {
+        let path = path.unwrap_or("");
         let todo = Todo {
             today: Day::new(today()),
             days: Vec::<Day>::new(),
-            file_path: &Path::new(""),
+            file_path: &Path::new(path),
         };
         Ok(todo)
     }
@@ -73,6 +76,25 @@ impl<'a> Todo<'a> {
             .expect("Unable to parse file contents");
         todo.file_path = todo_file;
         Ok(todo)
+    }
+
+    pub fn add(&mut self, task_txt: &str, section: &str) -> Result<()> {
+        let task: Task = task_txt.parse()?;
+        let sections: &mut Vec<Section> = &mut self.today.sections;
+
+        // find section position in vec
+        let pos = sections
+            .iter()
+            .position(|sec| sec.name == section)
+            // create section if it doesnt exist
+            .unwrap_or_else(|| {
+                sections.push(Section::new(section));
+                sections.len() - 1
+            });
+
+        // put task in section
+        sections[pos].tasks.push(task);
+        Ok(())
     }
 }
 
@@ -273,6 +295,142 @@ mod tests {
         let _ = todo.save().expect("Unable to load file");
 
         let actual = read_to_string(&path).expect("Unable to read file");
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn add_task() {
+        let base = Todo {
+            today: Day {
+                date: today(),
+                sections: vec![
+                    Section {
+                        name: "Section 1".to_string(),
+                        tasks: vec![
+                            Task {
+                                text: "task 1".to_string(),
+                            },
+                            Task {
+                                text: "task 2".to_string(),
+                            },
+                            Task {
+                                text: "task 3".to_string(),
+                            },
+                        ],
+                    },
+                    Section {
+                        name: "Done".to_string(),
+                        tasks: vec![],
+                    },
+                ],
+            },
+            file_path: Path::new(""),
+            days: vec![],
+        };
+
+        let expected = Todo {
+            today: Day {
+                date: today(),
+                sections: vec![
+                    Section {
+                        name: "Section 1".to_string(),
+                        tasks: vec![
+                            Task {
+                                text: "task 1".to_string(),
+                            },
+                            Task {
+                                text: "task 2".to_string(),
+                            },
+                            Task {
+                                text: "task 3".to_string(),
+                            },
+                            Task {
+                                text: "added task".to_string(),
+                            },
+                        ],
+                    },
+                    Section {
+                        name: "Done".to_string(),
+                        tasks: vec![],
+                    },
+                ],
+            },
+            file_path: Path::new(""),
+            days: vec![],
+        };
+
+        let mut actual = base.clone();
+        actual.add("added task", "Section 1").unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn add_task_new_section() {
+        let base = Todo {
+            today: Day {
+                date: today(),
+                sections: vec![
+                    Section {
+                        name: "Section 1".to_string(),
+                        tasks: vec![
+                            Task {
+                                text: "task 1".to_string(),
+                            },
+                            Task {
+                                text: "task 2".to_string(),
+                            },
+                            Task {
+                                text: "task 3".to_string(),
+                            },
+                        ],
+                    },
+                    Section {
+                        name: "Done".to_string(),
+                        tasks: vec![],
+                    },
+                ],
+            },
+            file_path: Path::new(""),
+            days: vec![],
+        };
+
+        let expected = Todo {
+            today: Day {
+                date: today(),
+                sections: vec![
+                    Section {
+                        name: "Section 1".to_string(),
+                        tasks: vec![
+                            Task {
+                                text: "task 1".to_string(),
+                            },
+                            Task {
+                                text: "task 2".to_string(),
+                            },
+                            Task {
+                                text: "task 3".to_string(),
+                            },
+                        ],
+                    },
+                    Section {
+                        name: "Done".to_string(),
+                        tasks: vec![],
+                    },
+                    // new section is added to end of vec, not before Done
+                    Section {
+                        name: "New Section".to_string(),
+                        tasks: vec![Task {
+                            text: "added task".to_string(),
+                        }],
+                    },
+                ],
+            },
+            file_path: Path::new(""),
+            days: vec![],
+        };
+
+        let mut actual = base.clone();
+        actual.add("added task", "New Section").unwrap();
         assert_eq!(actual, expected);
     }
 }

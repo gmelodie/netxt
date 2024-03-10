@@ -83,20 +83,20 @@ fn is_section_end(line: &str) -> bool {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Section {
     pub name: String,
     pub tasks: Vec<Task>,
 }
 
-// impl Section {
-//     fn new(name: &str) -> Section {
-//         Section {
-//             name: name.to_string(),
-//             tasks: Vec::<Task>::new(),
-//         }
-//     }
-// }
+impl Section {
+    pub fn new(name: &str) -> Section {
+        Section {
+            name: name.to_string(),
+            tasks: Vec::<Task>::new(),
+        }
+    }
+}
 
 impl str::FromStr for Section {
     type Err = Box<dyn error::Error>;

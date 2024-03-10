@@ -6,7 +6,7 @@ use std::error;
 use std::fmt;
 use std::str;
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Day {
     pub date: NaiveDate,
     pub sections: Vec<Section>,

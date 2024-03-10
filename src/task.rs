@@ -3,7 +3,7 @@ use std::error;
 use std::fmt;
 use std::str::FromStr;
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Task {
     pub text: String,
 }
