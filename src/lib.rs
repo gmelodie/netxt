@@ -17,29 +17,71 @@ mod util;
 
 use util::*;
 
-use day::{Day, DayIterator};
+pub use day::{Day, DayIterator};
 use task::Task;
 
 macro_rules! err {
     ($($tt:tt)*) => { Err(Box::<dyn error::Error>::from(format!($($tt)*))) };
 }
 
+static DEFAULT_TODO_FILE: &str = "todo.txt";
+
 #[derive(PartialEq, Debug, Clone)]
 pub struct Todo<'todo_life> {
-    today: Day,
-    days: Vec<Day>, // does not contain today, only contains days that are finished
+    pub today: Day,
+    pub days: Vec<Day>, // does not contain today, only contains days that are finished
     file_path: &'todo_life Path,
 }
 
 impl<'todo_life> Todo<'todo_life> {
     pub fn new(path: Option<&'todo_life str>) -> Result<Todo<'todo_life>> {
-        let path = path.unwrap_or("");
+        let path = match path {
+            // if path passed but file doesnt exist, create it
+            Some(path) => {
+                if let Err(_error) = OpenOptions::new().read(true).open(path) {
+                    OpenOptions::new().write(true).create(true).open(path)?;
+                };
+                Path::new(path)
+            }
+            // if path not passed, create default file if possible
+            None => {
+                if let Err(_error) = OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(DEFAULT_TODO_FILE)
+                {
+                    return err!("File with default name {DEFAULT_TODO_FILE} already exists");
+                }
+                Path::new(DEFAULT_TODO_FILE)
+            }
+        };
         let todo = Todo {
             today: Day::new(today()),
             days: Vec::<Day>::new(),
             file_path: &Path::new(path),
         };
         Ok(todo)
+    }
+
+    /// Saves today in days and creates new today
+    pub fn next_day(&mut self) {
+        self.days.push(self.today.clone());
+        self.today.date = today();
+        // clear "Done" section, create one if didnt find
+        match self
+            .today
+            .sections
+            .iter()
+            .position(|section| section.name == "Done")
+        {
+            Some(pos) => {
+                self.today.sections[pos].tasks = Vec::<Task>::new();
+            }
+            None => {
+                let sec = Section::new("Done");
+                self.today.sections.push(sec);
+            }
+        }
     }
 
     pub fn save(&self) -> Result<()> {

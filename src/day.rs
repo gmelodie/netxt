@@ -24,7 +24,8 @@ impl str::FromStr for Day {
         let text = s.trim().to_string();
         // first line must be the date
         let mut lines = text.lines();
-        let date = NaiveDate::parse_from_str(lines.next().unwrap().trim(), "[%Y-%m-%d]")?;
+        let date = NaiveDate::parse_from_str(lines.next().unwrap().trim(), "[%Y-%m-%d]")
+            .expect("Unable to find date in day"); // TODO: ignore date if didnt find it, use today() as date
 
         let mut sections: Vec<Section> = Vec::new();
         // the rest of the lines should be sections with tasks
