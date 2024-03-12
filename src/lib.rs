@@ -15,6 +15,7 @@ mod section;
 mod task;
 mod util;
 
+pub use util::today;
 use util::*;
 
 pub use day::{Day, DayIterator};
@@ -55,11 +56,13 @@ impl<'todo_life> Todo<'todo_life> {
                 Path::new(DEFAULT_TODO_FILE)
             }
         };
-        let todo = Todo {
+
+        // load from file or create new blank one
+        let todo = Todo::load(path).unwrap_or(Todo {
             today: Day::new(today()),
             days: Vec::<Day>::new(),
             file_path: &Path::new(path),
-        };
+        });
         Ok(todo)
     }
 
@@ -94,13 +97,12 @@ impl<'todo_life> Todo<'todo_life> {
         // don't save if file is up to date
         let file_todo = Todo::load(self.file_path)?;
         if file_todo == *self {
-            return Ok(()); // maybe want to return Err here?
+            return err!("File already up to date");
         }
 
         let mut f = OpenOptions::new()
             .write(true)
             .create(true)
-            .append(true)
             .open(&self.file_path)?;
         f.write_all(format!("{self}").as_bytes())?;
         Ok(())
@@ -146,11 +148,16 @@ impl<'a> str::FromStr for Todo<'a> {
         let text = s.trim().to_string();
         let mut days: Vec<Day> = Vec::new();
         let day_iter = DayIterator::new(&text);
+        let mut cur_day = Day::new(today());
         for day in day_iter {
-            days.push(day);
+            if day.date == today() {
+                cur_day = day;
+            } else {
+                days.push(day);
+            }
         }
         Ok(Todo {
-            today: Day::new(today()),
+            today: cur_day,
             days,
             file_path: &Path::new(""), // no path to give, is this an issue?
         })
@@ -160,7 +167,7 @@ impl<'a> str::FromStr for Todo<'a> {
 impl<'a> fmt::Display for Todo<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let days = self.days.iter().join("\n");
-        write!(f, "{days}")
+        write!(f, "{days}\n{}", self.today)
     }
 }
 
