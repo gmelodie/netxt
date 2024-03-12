@@ -170,6 +170,7 @@ mod tests {
     use crate::section::Section;
     use crate::task::Task;
 
+    use chrono::Duration as ChronoDuration;
     use chrono::NaiveDate;
     use indoc::indoc;
     use std::io::Write;
@@ -473,6 +474,91 @@ mod tests {
 
         let mut actual = base.clone();
         actual.add("added task", "New Section").unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn next_day() {
+        let base_day = today();
+        let base = Todo {
+            today: Day {
+                date: base_day,
+                sections: vec![
+                    Section {
+                        name: "Section 1".to_string(),
+                        tasks: vec![
+                            Task {
+                                text: "task 1".to_string(),
+                            },
+                            Task {
+                                text: "task 2".to_string(),
+                            },
+                        ],
+                    },
+                    Section {
+                        name: "Done".to_string(),
+                        tasks: vec![Task {
+                            text: "task 3".to_string(),
+                        }],
+                    },
+                ],
+            },
+            file_path: Path::new(""),
+            days: vec![],
+        };
+
+        let expected = Todo {
+            today: Day {
+                date: base_day + ChronoDuration::days(1),
+                sections: vec![
+                    Section {
+                        name: "Section 1".to_string(),
+                        tasks: vec![
+                            Task {
+                                text: "task 1".to_string(),
+                            },
+                            Task {
+                                text: "task 2".to_string(),
+                            },
+                        ],
+                    },
+                    Section {
+                        name: "Done".to_string(),
+                        tasks: vec![],
+                    },
+                ],
+            },
+            file_path: Path::new(""),
+            days: vec![Day {
+                date: base_day,
+                sections: vec![
+                    Section {
+                        name: "Section 1".to_string(),
+                        tasks: vec![
+                            Task {
+                                text: "task 1".to_string(),
+                            },
+                            Task {
+                                text: "task 2".to_string(),
+                            },
+                        ],
+                    },
+                    Section {
+                        name: "Done".to_string(),
+                        tasks: vec![Task {
+                            text: "task 3".to_string(),
+                        }],
+                    },
+                ],
+            }],
+        };
+
+        let mut actual = base.clone();
+        // need to manually set the date
+        // TODO: find a good way to mock time
+
+        actual.next_day();
+        actual.today.date = base_day + ChronoDuration::days(1);
         assert_eq!(actual, expected);
     }
 }
