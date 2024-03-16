@@ -83,7 +83,7 @@ fn is_section_end(line: &str) -> bool {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Section {
     pub name: String,
     pub tasks: Vec<Task>,

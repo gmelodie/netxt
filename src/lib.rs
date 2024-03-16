@@ -37,14 +37,14 @@ pub struct Todo<'todo_life> {
 impl<'todo_life> Todo<'todo_life> {
     pub fn new(path: Option<&'todo_life str>) -> Result<Todo<'todo_life>> {
         let path = match path {
-            // if path passed but file doesnt exist, create it
+            // if path present but file doesnt exist, create it
             Some(path) => {
                 if let Err(_error) = OpenOptions::new().read(true).open(path) {
                     OpenOptions::new().write(true).create(true).open(path)?;
                 };
                 Path::new(path)
             }
-            // if path not passed, create default file if possible
+            // if path not present, create default file if possible
             None => {
                 if let Err(_error) = OpenOptions::new()
                     .write(true)

@@ -2,11 +2,12 @@ use crate::section::{Section, SectionIterator};
 use crate::util::*;
 use chrono::NaiveDate;
 use itertools::Itertools;
+use std::cmp::Ordering;
 use std::error;
 use std::fmt;
 use std::str;
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Day {
     pub date: NaiveDate,
     pub sections: Vec<Section>,
@@ -15,6 +16,18 @@ impl Day {
     pub fn new(date: NaiveDate) -> Day {
         let sections: Vec<Section> = Vec::new();
         Day { date, sections }
+    }
+}
+
+// when comparing with greater, compare dates
+impl Ord for Day {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.date.cmp(&other.date)
+    }
+}
+impl PartialOrd for Day {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
