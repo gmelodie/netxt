@@ -58,11 +58,27 @@ impl<'todo_life> Todo<'todo_life> {
         };
 
         // load from file or create new blank one
-        let todo = Todo::load(path).unwrap_or(Todo {
+        let mut todo = Todo::load(path).unwrap_or(Todo {
             today: Day::new(today()),
             days: Vec::<Day>::new(),
             file_path: &Path::new(path),
         });
+
+        // clear "Done" section in today, create one if didnt find
+        match todo
+            .today
+            .sections
+            .iter()
+            .position(|section| section.name == "Done")
+        {
+            Some(pos) => {
+                todo.today.sections[pos].tasks = Vec::<Task>::new();
+            }
+            None => {
+                let sec = Section::new("Done");
+                todo.today.sections.push(sec);
+            }
+        }
         Ok(todo)
     }
 
@@ -87,7 +103,7 @@ impl<'todo_life> Todo<'todo_life> {
         }
     }
 
-    pub fn save(&self) -> Result<()> {
+    pub fn save(&mut self) -> Result<()> {
         if let Some(last_day_in_file) = get_last_day(self.file_path) {
             if last_day_in_file > today() {
                 return err!("Invalid date: date on file is ahead of today");
@@ -100,9 +116,22 @@ impl<'todo_life> Todo<'todo_life> {
             return err!("File already up to date");
         }
 
+        // merge todo into file if file already exists
+        if self.file_path.exists() {
+            let file_todo = Todo::new(Some(
+                self.file_path.to_str().expect("Could not transform path"),
+            ))?;
+            for day in file_todo.days {
+                if !self.days.contains(&day) {
+                    self.days.push(day.clone());
+                }
+            }
+            self.days.sort();
+        }
+
         let mut f = OpenOptions::new()
             .write(true)
-            .create(true)
+            .truncate(true)
             .open(&self.file_path)?;
         f.write_all(format!("{self}").as_bytes())?;
         Ok(())
