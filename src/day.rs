@@ -37,8 +37,7 @@ impl str::FromStr for Day {
         let text = s.trim().to_string();
         // first line must be the date
         let mut lines = text.lines();
-        let date = NaiveDate::parse_from_str(lines.next().unwrap().trim(), "[%Y-%m-%d]")
-            .expect("Unable to find date in day"); // TODO: ignore date if didnt find it, use today() as date
+        let date = NaiveDate::parse_from_str(lines.next().unwrap().trim(), "[%Y-%m-%d]")?;
 
         let mut sections: Vec<Section> = Vec::new();
         // the rest of the lines should be sections with tasks
@@ -53,7 +52,7 @@ impl str::FromStr for Day {
 impl fmt::Display for Day {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let date = self.date.format("[%Y-%m-%d]").to_string();
-        let sections = self.sections.iter().join("\n");
+        let sections = self.sections.iter().join("\n\n");
         write!(f, "{date}\n{sections}")
     }
 }

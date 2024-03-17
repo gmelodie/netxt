@@ -355,6 +355,7 @@ mod tests {
             - task 1
             - task 3
             - task 2
+
             Done
 
             [2024-03-07]
@@ -362,6 +363,7 @@ mod tests {
             - task 11
             - task 31
             - task 21
+
             Done
         "};
 
