@@ -1,5 +1,6 @@
 //! Todo is NOT timezone-aware
 
+use chrono::NaiveDate;
 use itertools::Itertools;
 use section::Section;
 use std::error;
@@ -84,6 +85,7 @@ impl<'todo_life> Todo<'todo_life> {
 
     /// Saves today in days and creates new today
     pub fn next_day(&mut self) {
+        // TODO: make sure day is not already present in days before saving
         self.days.push(self.today.clone());
         self.today.date = today();
         // clear "Done" section, create one if didnt find
@@ -177,16 +179,38 @@ impl<'a> str::FromStr for Todo<'a> {
         let text = s.trim().to_string();
         let mut days: Vec<Day> = Vec::new();
         let day_iter = DayIterator::new(&text);
-        let mut cur_day = Day::new(today());
+
+        let old_date = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap();
+        let mut last_day = Day::new(old_date); // set date to old date
+
         for day in day_iter {
-            if day.date == today() {
-                cur_day = day;
-            } else {
-                days.push(day);
+            if day.date > last_day.date {
+                last_day = day.clone();
+            }
+            days.push(day);
+        }
+
+        // last day's tasks will becode today's tasks
+        // so we must update the date to today
+        last_day.date = today();
+
+        // also clear "Done" section from last day
+        match last_day
+            .sections
+            .iter()
+            .position(|section| section.name == "Done")
+        {
+            Some(pos) => {
+                last_day.sections[pos].tasks = Vec::<Task>::new();
+            }
+            None => {
+                let sec = Section::new("Done");
+                last_day.sections.push(sec);
             }
         }
+
         Ok(Todo {
-            today: cur_day,
+            today: last_day,
             days,
             file_path: &Path::new(""), // no path to give, is this an issue?
         })
@@ -196,7 +220,7 @@ impl<'a> str::FromStr for Todo<'a> {
 impl<'a> fmt::Display for Todo<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let days = self.days.iter().join("\n");
-        write!(f, "{days}\n{}", self.today)
+        write!(f, "{days}")
     }
 }
 
@@ -237,12 +261,35 @@ mod tests {
             - task 31
             - task 21
             Done
+            - task 4
         "}
             .to_string(),
         );
         let path = file.path();
         let expected = Todo {
-            today: Day::new(today()),
+            today: Day {
+                date: today(),
+                sections: vec![
+                    Section {
+                        name: "Section 2".to_string(),
+                        tasks: vec![
+                            Task {
+                                text: "task 11".to_string(),
+                            },
+                            Task {
+                                text: "task 31".to_string(),
+                            },
+                            Task {
+                                text: "task 21".to_string(),
+                            },
+                        ],
+                    },
+                    Section {
+                        name: "Done".to_string(),
+                        tasks: vec![],
+                    },
+                ],
+            },
             file_path: path,
             days: vec![
                 Day {
@@ -287,7 +334,9 @@ mod tests {
                         },
                         Section {
                             name: "Done".to_string(),
-                            tasks: vec![],
+                            tasks: vec![Task {
+                                text: "task 4".to_string(),
+                            }],
                         },
                     ],
                 },
@@ -318,7 +367,7 @@ mod tests {
 
         let file = NamedTempFile::new().expect("Unable to create tmp file");
         let path = file.path();
-        let todo = Todo {
+        let mut todo = Todo {
             today: Day::new(today()),
             file_path: path,
             days: vec![

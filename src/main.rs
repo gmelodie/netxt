@@ -30,7 +30,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     match &cli.command {
         Commands::Init => {
-            let todo = Todo::new(None)?;
+            let mut todo = Todo::new(None)?;
             todo.save()?;
             Ok(())
         }
