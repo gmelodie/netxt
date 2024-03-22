@@ -30,8 +30,7 @@ static DEFAULT_TODO_FILE: &str = "todo.txt";
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Todo<'todo_life> {
-    pub today: Day,
-    pub days: Vec<Day>, // does not contain today, only contains days that are finished
+    pub days: Vec<Day>,
     file_path: &'todo_life Path,
 }
 
@@ -59,50 +58,73 @@ impl<'todo_life> Todo<'todo_life> {
         };
 
         // load from file or create new blank one
-        let mut todo = Todo::load(path).unwrap_or(Todo {
-            today: Day::new(today()),
+        let todo = Todo::load(path).unwrap_or(Todo {
             days: Vec::<Day>::new(),
             file_path: &Path::new(path),
         });
 
-        // clear "Done" section in today, create one if didnt find
-        match todo
-            .today
-            .sections
-            .iter()
-            .position(|section| section.name == "Done")
-        {
-            Some(pos) => {
-                todo.today.sections[pos].tasks = Vec::<Task>::new();
-            }
-            None => {
-                let sec = Section::new("Done");
-                todo.today.sections.push(sec);
-            }
-        }
         Ok(todo)
     }
 
-    /// Saves today in days and creates new today
+    fn last_day(&self) -> Option<&Day> {
+        if self.days.len() == 0 {
+            return None;
+        }
+
+        let mut last_day = &self.days[0];
+        for day in &self.days {
+            if day.date > last_day.date {
+                last_day = &day;
+            }
+        }
+        Some(last_day)
+    }
+
+    fn last_day_pos(&self) -> Option<usize> {
+        let last_day = self.last_day()?;
+        Some(
+            self.days
+                .iter()
+                .position(|day| day.date == last_day.date)
+                // create section if it doesnt exist
+                .expect("Unable to find last_day pos"),
+        )
+    }
+
+    /// Creates new day with all tasks/sections from most recent day and cleared Done section
+    /// next_day is idempotent, meaning it will do nothing if today already exists in days
     pub fn next_day(&mut self) {
-        // TODO: make sure day is not already present in days before saving
-        self.days.push(self.today.clone());
-        self.today.date = today();
+        let mut new_day = match self.last_day() {
+            Some(last_day) => {
+                // days and today is created: do nothing
+                if last_day.date == today() {
+                    return;
+                }
+                // days but no today: copy last day
+                let mut clone_last_day = last_day.clone();
+                clone_last_day.date = today();
+                clone_last_day
+            }
+            // no days: create new empty day
+            None => Day::new(today()),
+        };
+
         // clear "Done" section, create one if didnt find
-        match self
-            .today
+        match new_day
             .sections
             .iter()
             .position(|section| section.name == "Done")
         {
             Some(pos) => {
-                self.today.sections[pos].tasks = Vec::<Task>::new();
+                new_day.sections[pos].tasks = Vec::<Task>::new();
             }
             None => {
                 let sec = Section::new("Done");
-                self.today.sections.push(sec);
+                new_day.sections.push(sec);
             }
         }
+
+        self.days.push(new_day);
     }
 
     pub fn save(&mut self) -> Result<()> {
@@ -154,11 +176,16 @@ impl<'todo_life> Todo<'todo_life> {
     }
 
     pub fn add(&mut self, task_txt: &str, section: &str) -> Result<()> {
+        // make sure current day exists
+        self.next_day();
+
         let task: Task = task_txt.parse()?;
-        let sections: &mut Vec<Section> = &mut self.today.sections;
+        let day_pos = self.last_day_pos().expect("Could not get last day pos");
 
         // find section position in vec
-        let pos = sections
+        let sections = &mut self.days[day_pos].sections;
+
+        let section_pos = sections
             .iter()
             .position(|sec| sec.name == section)
             // create section if it doesnt exist
@@ -168,7 +195,7 @@ impl<'todo_life> Todo<'todo_life> {
             });
 
         // put task in section
-        sections[pos].tasks.push(task);
+        self.days[day_pos].sections[section_pos].tasks.push(task);
         Ok(())
     }
 }
@@ -190,27 +217,7 @@ impl<'a> str::FromStr for Todo<'a> {
             days.push(day);
         }
 
-        // last day's tasks will becode today's tasks
-        // so we must update the date to today
-        last_day.date = today();
-
-        // also clear "Done" section from last day
-        match last_day
-            .sections
-            .iter()
-            .position(|section| section.name == "Done")
-        {
-            Some(pos) => {
-                last_day.sections[pos].tasks = Vec::<Task>::new();
-            }
-            None => {
-                let sec = Section::new("Done");
-                last_day.sections.push(sec);
-            }
-        }
-
         Ok(Todo {
-            today: last_day,
             days,
             file_path: &Path::new(""), // no path to give, is this an issue?
         })
@@ -267,30 +274,6 @@ mod tests {
         );
         let path = file.path();
         let expected = Todo {
-            today: Day {
-                date: today(),
-                sections: vec![
-                    Section {
-                        name: "Section 2".to_string(),
-                        tasks: vec![
-                            Task {
-                                text: "task 11".to_string(),
-                            },
-                            Task {
-                                text: "task 31".to_string(),
-                            },
-                            Task {
-                                text: "task 21".to_string(),
-                            },
-                        ],
-                    },
-                    Section {
-                        name: "Done".to_string(),
-                        tasks: vec![],
-                    },
-                ],
-            },
-            file_path: path,
             days: vec![
                 Day {
                     date: NaiveDate::from_ymd_opt(2024, 3, 6).unwrap(),
@@ -341,6 +324,7 @@ mod tests {
                     ],
                 },
             ],
+            file_path: path,
         };
 
         let actual = Todo::load(&path).expect("Unable to load file");
@@ -370,7 +354,6 @@ mod tests {
         let file = NamedTempFile::new().expect("Unable to create tmp file");
         let path = file.path();
         let mut todo = Todo {
-            today: Day::new(today()),
             file_path: path,
             days: vec![
                 Day {
@@ -431,7 +414,7 @@ mod tests {
     #[test]
     fn add_task() {
         let base = Todo {
-            today: Day {
+            days: vec![Day {
                 date: today(),
                 sections: vec![
                     Section {
@@ -453,13 +436,12 @@ mod tests {
                         tasks: vec![],
                     },
                 ],
-            },
+            }],
             file_path: Path::new(""),
-            days: vec![],
         };
 
         let expected = Todo {
-            today: Day {
+            days: vec![Day {
                 date: today(),
                 sections: vec![
                     Section {
@@ -484,9 +466,8 @@ mod tests {
                         tasks: vec![],
                     },
                 ],
-            },
+            }],
             file_path: Path::new(""),
-            days: vec![],
         };
 
         let mut actual = base.clone();
@@ -497,7 +478,7 @@ mod tests {
     #[test]
     fn add_task_new_section() {
         let base = Todo {
-            today: Day {
+            days: vec![Day {
                 date: today(),
                 sections: vec![
                     Section {
@@ -519,13 +500,12 @@ mod tests {
                         tasks: vec![],
                     },
                 ],
-            },
+            }],
             file_path: Path::new(""),
-            days: vec![],
         };
 
         let expected = Todo {
-            today: Day {
+            days: vec![Day {
                 date: today(),
                 sections: vec![
                     Section {
@@ -554,9 +534,8 @@ mod tests {
                         }],
                     },
                 ],
-            },
+            }],
             file_path: Path::new(""),
-            days: vec![],
         };
 
         let mut actual = base.clone();
@@ -566,58 +545,9 @@ mod tests {
 
     #[test]
     fn next_day() {
-        let base_day = today();
         let base = Todo {
-            today: Day {
-                date: base_day,
-                sections: vec![
-                    Section {
-                        name: "Section 1".to_string(),
-                        tasks: vec![
-                            Task {
-                                text: "task 1".to_string(),
-                            },
-                            Task {
-                                text: "task 2".to_string(),
-                            },
-                        ],
-                    },
-                    Section {
-                        name: "Done".to_string(),
-                        tasks: vec![Task {
-                            text: "task 3".to_string(),
-                        }],
-                    },
-                ],
-            },
-            file_path: Path::new(""),
-            days: vec![],
-        };
-
-        let expected = Todo {
-            today: Day {
-                date: base_day + ChronoDuration::days(1),
-                sections: vec![
-                    Section {
-                        name: "Section 1".to_string(),
-                        tasks: vec![
-                            Task {
-                                text: "task 1".to_string(),
-                            },
-                            Task {
-                                text: "task 2".to_string(),
-                            },
-                        ],
-                    },
-                    Section {
-                        name: "Done".to_string(),
-                        tasks: vec![],
-                    },
-                ],
-            },
-            file_path: Path::new(""),
             days: vec![Day {
-                date: base_day,
+                date: today() - ChronoDuration::days(1),
                 sections: vec![
                     Section {
                         name: "Section 1".to_string(),
@@ -638,14 +568,60 @@ mod tests {
                     },
                 ],
             }],
+            file_path: Path::new(""),
+        };
+
+        let expected = Todo {
+            days: vec![
+                Day {
+                    date: today() - ChronoDuration::days(1),
+                    sections: vec![
+                        Section {
+                            name: "Section 1".to_string(),
+                            tasks: vec![
+                                Task {
+                                    text: "task 1".to_string(),
+                                },
+                                Task {
+                                    text: "task 2".to_string(),
+                                },
+                            ],
+                        },
+                        Section {
+                            name: "Done".to_string(),
+                            tasks: vec![Task {
+                                text: "task 3".to_string(),
+                            }],
+                        },
+                    ],
+                },
+                Day {
+                    date: today(),
+                    sections: vec![
+                        Section {
+                            name: "Section 1".to_string(),
+                            tasks: vec![
+                                Task {
+                                    text: "task 1".to_string(),
+                                },
+                                Task {
+                                    text: "task 2".to_string(),
+                                },
+                            ],
+                        },
+                        Section {
+                            name: "Done".to_string(),
+                            tasks: vec![],
+                        },
+                    ],
+                },
+            ],
+            file_path: Path::new(""),
         };
 
         let mut actual = base.clone();
-        // need to manually set the date
-        // TODO: find a good way to mock time
 
         actual.next_day();
-        actual.today.date = base_day + ChronoDuration::days(1);
         assert_eq!(actual, expected);
     }
 }
