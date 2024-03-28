@@ -1,8 +1,12 @@
 [package]
 name = "netxt"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Gabriel Cruz <gabrieldemelocruz@gmail.com>"]
+description = " Handling TODO .txt files"
+license = "MIT"
+repository = "https://github.com/gmelodie/netxt"
+keywords = ["parser", "todo", "task", "txt"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
