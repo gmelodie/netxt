@@ -9,7 +9,7 @@ pub struct Task {
 }
 
 impl FromStr for Task {
-    type Err = Box<dyn error::Error>;
+    type Err = Box<dyn error::Error + Send + Sync>;
     fn from_str(s: &str) -> Result<Self> {
         Ok(Task {
             text: s.trim_start_matches(&['-', ' ']).to_string(), // trim - and spaces

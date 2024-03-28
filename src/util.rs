@@ -4,7 +4,7 @@ use std::fs::read_to_string;
 use std::path::Path;
 use std::result;
 
-pub type Result<T> = result::Result<T, Box<dyn error::Error>>;
+pub type Result<T> = result::Result<T, Box<dyn error::Error + Send + Sync>>;
 
 pub fn today() -> NaiveDate {
     // Current local time

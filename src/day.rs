@@ -32,7 +32,7 @@ impl PartialOrd for Day {
 }
 
 impl str::FromStr for Day {
-    type Err = Box<dyn error::Error>;
+    type Err = Box<dyn error::Error + Send + Sync>;
     fn from_str(s: &str) -> Result<Self> {
         let text = s.trim().to_string();
         // first line must be the date

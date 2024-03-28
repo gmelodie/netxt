@@ -23,7 +23,7 @@ pub use day::{Day, DayIterator};
 use task::Task;
 
 macro_rules! err {
-    ($($tt:tt)*) => { Err(Box::<dyn error::Error>::from(format!($($tt)*))) };
+    ($($tt:tt)*) => { Err(Box::<dyn error::Error + Send + Sync>::from(format!($($tt)*))) };
 }
 
 static DEFAULT_TODO_FILE: &str = "todo.txt";
@@ -188,7 +188,7 @@ impl<'todo_life> Todo<'todo_life> {
 }
 
 impl<'a> str::FromStr for Todo<'a> {
-    type Err = Box<dyn error::Error>;
+    type Err = Box<dyn error::Error + Send + Sync>;
     fn from_str(s: &str) -> Result<Self> {
         let text = s.trim().to_string();
         let mut days: Vec<Day> = Vec::new();
@@ -336,6 +336,7 @@ mod tests {
             - task 21
 
             Done
+
         "};
 
         let file = NamedTempFile::new().expect("Unable to create tmp file");

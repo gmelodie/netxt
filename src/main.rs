@@ -4,7 +4,7 @@ use std::{error, result};
 
 use netxt::Todo;
 
-type Result<T> = result::Result<T, Box<dyn error::Error>>;
+type Result<T> = result::Result<T, Box<dyn error::Error + Send + Sync>>;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
