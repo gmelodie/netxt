@@ -1,7 +1,7 @@
 use chrono::{Local, NaiveDate};
 use std::error;
 use std::fs::read_to_string;
-use std::path::Path;
+use std::path::PathBuf;
 use std::result;
 
 pub type Result<T> = result::Result<T, Box<dyn error::Error + Send + Sync>>;
@@ -14,7 +14,7 @@ pub fn today() -> NaiveDate {
     now.date_naive()
 }
 
-pub fn get_last_day(todo_file: &Path) -> Option<NaiveDate> {
+pub fn get_last_day(todo_file: &PathBuf) -> Option<NaiveDate> {
     let contents = read_to_string(todo_file).expect("Unable to read file get_last_day");
     for line in contents.lines().rev() {
         if let Some(first_char) = line.chars().next() {

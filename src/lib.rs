@@ -8,7 +8,7 @@ use std::fmt;
 use std::fs::read_to_string;
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::path::Path;
+use std::path::PathBuf;
 use std::str;
 
 mod day;
@@ -29,20 +29,20 @@ macro_rules! err {
 static DEFAULT_TODO_FILE: &str = "todo.txt";
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct Todo<'todo_life> {
+pub struct Todo {
     pub days: Vec<Day>,
-    file_path: &'todo_life Path,
+    file_path: PathBuf,
 }
 
-impl<'todo_life> Todo<'todo_life> {
-    pub fn new(path: Option<&'todo_life str>) -> Result<Todo<'todo_life>> {
-        let path = match path {
+impl Todo {
+    pub fn new(path: Option<&str>) -> Result<Todo> {
+        let path: PathBuf = match path {
             // if path present but file doesnt exist, create it
             Some(path) => {
                 if let Err(_error) = OpenOptions::new().read(true).open(path) {
                     OpenOptions::new().write(true).create(true).open(path)?;
                 };
-                Path::new(path)
+                path.into()
             }
             // if path not present, create default file if possible
             None => {
@@ -53,14 +53,14 @@ impl<'todo_life> Todo<'todo_life> {
                 {
                     return err!("File with default name {DEFAULT_TODO_FILE} already exists");
                 }
-                Path::new(DEFAULT_TODO_FILE)
+                DEFAULT_TODO_FILE.into()
             }
         };
 
         // load from file or create new blank one
-        let todo = Todo::load(path).unwrap_or(Todo {
+        let todo = Todo::load(&path).unwrap_or(Todo {
             days: Vec::<Day>::new(),
-            file_path: &Path::new(path),
+            file_path: path,
         });
 
         Ok(todo)
@@ -128,14 +128,14 @@ impl<'todo_life> Todo<'todo_life> {
     }
 
     pub fn save(&mut self) -> Result<()> {
-        if let Some(last_day_in_file) = get_last_day(self.file_path) {
+        if let Some(last_day_in_file) = get_last_day(&self.file_path) {
             if last_day_in_file > today() {
                 return err!("Invalid date: date on file is ahead of today");
             }
         }
 
         // don't save if file is up to date
-        let file_todo = Todo::load(self.file_path)?;
+        let file_todo = Todo::load(&self.file_path)?;
         if file_todo == *self {
             return err!("File already up to date");
         }
@@ -148,7 +148,7 @@ impl<'todo_life> Todo<'todo_life> {
         Ok(())
     }
 
-    pub fn load(todo_file: &Path) -> Result<Todo> {
+    pub fn load(todo_file: &PathBuf) -> Result<Todo> {
         if let Some(last_day) = get_last_day(todo_file) {
             if last_day > today() {
                 return err!("Invalid date: date on file is ahead of today");
@@ -158,7 +158,7 @@ impl<'todo_life> Todo<'todo_life> {
             .expect("Unable to read file")
             .parse()
             .expect("Unable to parse file contents");
-        todo.file_path = todo_file;
+        todo.file_path = todo_file.to_path_buf();
         Ok(todo)
     }
 
@@ -187,7 +187,7 @@ impl<'todo_life> Todo<'todo_life> {
     }
 }
 
-impl<'a> str::FromStr for Todo<'a> {
+impl str::FromStr for Todo {
     type Err = Box<dyn error::Error + Send + Sync>;
     fn from_str(s: &str) -> Result<Self> {
         let text = s.trim().to_string();
@@ -206,12 +206,12 @@ impl<'a> str::FromStr for Todo<'a> {
 
         Ok(Todo {
             days,
-            file_path: &Path::new(""), // no path to give, is this an issue?
+            file_path: PathBuf::new(), // no path to give, is this an issue?
         })
     }
 }
 
-impl<'a> fmt::Display for Todo<'a> {
+impl fmt::Display for Todo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let days = self.days.iter().join("\n");
         write!(f, "{days}")
@@ -259,7 +259,7 @@ mod tests {
         "}
             .to_string(),
         );
-        let path = file.path();
+        let path = file.path().to_path_buf();
         let expected = Todo {
             days: vec![
                 Day {
@@ -311,7 +311,7 @@ mod tests {
                     ],
                 },
             ],
-            file_path: path,
+            file_path: path.clone(),
         };
 
         let actual = Todo::load(&path).expect("Unable to load file");
@@ -342,7 +342,7 @@ mod tests {
         let file = NamedTempFile::new().expect("Unable to create tmp file");
         let path = file.path();
         let mut todo = Todo {
-            file_path: path,
+            file_path: path.to_path_buf(),
             days: vec![
                 Day {
                     date: NaiveDate::from_ymd_opt(2024, 3, 6).unwrap(),
@@ -425,7 +425,7 @@ mod tests {
                     },
                 ],
             }],
-            file_path: Path::new(""),
+            file_path: PathBuf::new(),
         };
 
         let expected = Todo {
@@ -455,7 +455,7 @@ mod tests {
                     },
                 ],
             }],
-            file_path: Path::new(""),
+            file_path: PathBuf::new(),
         };
 
         let mut actual = base.clone();
@@ -489,7 +489,7 @@ mod tests {
                     },
                 ],
             }],
-            file_path: Path::new(""),
+            file_path: PathBuf::new(),
         };
 
         let expected = Todo {
@@ -523,7 +523,7 @@ mod tests {
                     },
                 ],
             }],
-            file_path: Path::new(""),
+            file_path: PathBuf::new(),
         };
 
         let mut actual = base.clone();
@@ -556,7 +556,7 @@ mod tests {
                     },
                 ],
             }],
-            file_path: Path::new(""),
+            file_path: PathBuf::new(),
         };
 
         let expected = Todo {
@@ -604,7 +604,7 @@ mod tests {
                     ],
                 },
             ],
-            file_path: Path::new(""),
+            file_path: PathBuf::new(),
         };
 
         let mut actual = base.clone();
