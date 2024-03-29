@@ -31,7 +31,7 @@ static DEFAULT_TODO_FILE: &str = "todo.txt";
 #[derive(PartialEq, Debug, Clone)]
 pub struct Todo {
     pub days: Vec<Day>,
-    file_path: PathBuf,
+    pub file_path: PathBuf,
 }
 
 impl Todo {
