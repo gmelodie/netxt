@@ -459,7 +459,7 @@ mod tests {
         };
 
         let mut actual = base.clone();
-        actual.add("added task", "Section 1").unwrap();
+        actual.add("- added task", "Section 1").unwrap();
         assert_eq!(actual, expected);
     }
 
@@ -527,7 +527,7 @@ mod tests {
         };
 
         let mut actual = base.clone();
-        actual.add("added task", "New Section").unwrap();
+        actual.add("- added task", "New Section").unwrap();
         assert_eq!(actual, expected);
     }
 

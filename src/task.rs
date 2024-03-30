@@ -11,8 +11,16 @@ pub struct Task {
 impl FromStr for Task {
     type Err = Box<dyn error::Error + Send + Sync>;
     fn from_str(s: &str) -> Result<Self> {
+        let s = s.trim();
+
+        let first_char = s.chars().next();
+        match first_char {
+            Some('-') => {}                                // this is a task
+            _ => return err!("Unable to parse task: {s}"), // this is not a task
+        }
+
         Ok(Task {
-            text: s.trim_start_matches(&['-', ' ']).to_string(), // trim - and spaces
+            text: s.trim_start_matches(&['-', ' ', '\t']).to_string(), // trim - and spaces
         })
     }
 }

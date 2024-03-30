@@ -43,7 +43,10 @@ impl str::FromStr for Day {
         // the rest of the lines should be sections with tasks
         let section_iter = SectionIterator::new(&text);
         for section in section_iter {
-            sections.push(section);
+            if let Err(e) = section {
+                return err!("Unable to parse day {date}: {e}");
+            }
+            sections.push(section?);
         }
         Ok(Day { date, sections })
     }
@@ -246,5 +249,36 @@ mod tests {
             ],
         };
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn err_parse_day() {
+        let day_text = indoc! {"
+            [2024-03-06]
+            Section 1
+            - task 1
+            - task 3
+            [oops error here]
+            - task 2
+
+            Section 2
+            - task 2.1
+            - task 2.2
+            Section 3
+            - task 3.2
+            - task 3.1
+        "};
+
+        let day = "2024-03-06";
+        let section = "Section 1";
+        let task = "[oops error here]";
+        let expected_error = format!("Unable to parse day {day}: Unable to parse section {section}: Unable to parse task: {task}");
+
+        let actual: Result<Day> = day_text.parse();
+
+        match actual {
+            Err(actual_error) => assert_eq!(actual_error.to_string(), expected_error),
+            Ok(_) => panic!("Expected {expected_error}, got Ok({})", actual.unwrap()),
+        }
     }
 }

@@ -21,7 +21,7 @@ impl<'a> SectionIterator<'a> {
 }
 
 impl<'a> Iterator for SectionIterator<'a> {
-    type Item = Section;
+    type Item = Result<Section>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut section: Vec<&'a str> = Vec::new();
@@ -47,12 +47,7 @@ impl<'a> Iterator for SectionIterator<'a> {
                 self.index += 1;
             }
 
-            let section = section
-                .join("\n")
-                .parse()
-                .expect("Unable to parse section text");
-
-            Some(section)
+            Some(section.join("\n").parse())
         }
     }
 }
@@ -127,7 +122,11 @@ impl str::FromStr for Section {
 
         // the rest of the lines should be tasks
         for line in lines {
-            tasks.push(line.parse().expect("Unable to parse task"));
+            let task: Task = match line.parse() {
+                Ok(t) => t,
+                Err(e) => return err!("Unable to parse section {name}: {e}"),
+            };
+            tasks.push(task);
         }
         Ok(Section { name, tasks })
     }
@@ -157,7 +156,7 @@ mod tests {
 
         "};
 
-        let actual: Section = section_text.parse().expect("Unable to parse day");
+        let actual: Section = section_text.parse().expect("Unable to parse section");
         let expected = Section {
             name: "Some Section".to_string(),
             tasks: vec![
@@ -173,5 +172,28 @@ mod tests {
             ],
         };
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn err_parse_section() {
+        let section_text = indoc! {"
+            Some Section
+            - task 1
+            - task 3
+            whoops other section
+            - task 2
+
+        "};
+
+        let name = "Some Section";
+        let line = "whoops other section";
+        let expected_error =
+            format!("Unable to parse section {name}: Unable to parse task: {line}");
+        let actual: Result<Section> = section_text.parse();
+
+        match actual {
+            Err(actual_error) => assert_eq!(actual_error.to_string(), expected_error),
+            Ok(_) => panic!("Expected {expected_error}, got Ok({})", actual.unwrap()),
+        }
     }
 }
