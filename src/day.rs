@@ -1,11 +1,11 @@
-use crate::section::{Section, SectionIterator};
-use crate::util::*;
+use crate::{
+    err,
+    section::{Section, SectionIterator},
+    util::*,
+};
 use chrono::NaiveDate;
 use itertools::Itertools;
-use std::cmp::Ordering;
-use std::error;
-use std::fmt;
-use std::str;
+use std::{cmp::Ordering, error, fmt, str};
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Day {

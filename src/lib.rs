@@ -3,13 +3,7 @@
 use chrono::NaiveDate;
 use itertools::Itertools;
 use section::Section;
-use std::error;
-use std::fmt;
-use std::fs::read_to_string;
-use std::fs::OpenOptions;
-use std::io::Write;
-use std::path::PathBuf;
-use std::str;
+use std::{error, fmt, fs::read_to_string, fs::OpenOptions, io::Write, path::PathBuf, str};
 
 mod day;
 mod section;
@@ -21,12 +15,6 @@ use util::*;
 
 pub use day::{Day, DayIterator};
 use task::Task;
-
-macro_rules! err {
-    ($($tt:tt)*) => { Err(Box::<dyn error::Error + Send + Sync>::from(format!($($tt)*))) };
-}
-
-static DEFAULT_TODO_FILE: &str = "todo.txt";
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Todo {

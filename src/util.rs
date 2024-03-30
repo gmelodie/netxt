@@ -4,6 +4,11 @@ use std::fs::read_to_string;
 use std::path::PathBuf;
 use std::result;
 
+#[macro_export]
+macro_rules! err {
+    ($($tt:tt)*) => { Err(Box::<dyn error::Error + Send + Sync>::from(format!($($tt)*))) };
+}
+pub static DEFAULT_TODO_FILE: &str = "todo.txt";
 pub type Result<T> = result::Result<T, Box<dyn error::Error + Send + Sync>>;
 
 pub fn today() -> NaiveDate {
