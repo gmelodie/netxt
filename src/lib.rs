@@ -1,9 +1,11 @@
 //! Todo is NOT timezone-aware
 
 use chrono::NaiveDate;
-use itertools::Itertools;
 use section::Section;
-use std::{error, fmt, fs::read_to_string, fs::OpenOptions, io::Write, path::PathBuf, str};
+use std::{
+    collections::HashMap, error, fmt, fs::read_to_string, fs::OpenOptions, io::Write,
+    path::PathBuf, str,
+};
 
 mod day;
 mod section;
@@ -18,7 +20,7 @@ use task::Task;
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Todo {
-    pub days: Vec<Day>,
+    pub days: HashMap<NaiveDate, Day>,
     pub file_path: PathBuf,
 }
 
@@ -47,7 +49,7 @@ impl Todo {
 
         // load from file or create new blank one
         let todo = Todo::load(&path).unwrap_or(Todo {
-            days: Vec::<Day>::new(),
+            days: HashMap::<NaiveDate, Day>::new(),
             file_path: path,
         });
 
@@ -59,24 +61,7 @@ impl Todo {
             return None;
         }
 
-        let mut last_day = &self.days[0];
-        for day in &self.days {
-            if day.date > last_day.date {
-                last_day = &day;
-            }
-        }
-        Some(last_day)
-    }
-
-    fn last_day_pos(&self) -> Option<usize> {
-        let last_day = self.last_day()?;
-        Some(
-            self.days
-                .iter()
-                .position(|day| day.date == last_day.date)
-                // create section if it doesnt exist
-                .expect("Unable to find last_day pos"),
-        )
+        self.days.values().max_by_key(|x| x.date)
     }
 
     /// Creates new empty day if there isn't a day with today() as date.
@@ -96,7 +81,7 @@ impl Todo {
             // no days: create new empty day
             None => Day::new(today()),
         };
-        self.days.push(new_day);
+        self.days.insert(new_day.date, new_day);
     }
 
     /// Creates new day with all tasks/sections from most recent day and cleared Done section
@@ -133,7 +118,7 @@ impl Todo {
             }
         }
 
-        self.days.push(new_day);
+        self.days.insert(new_day.date, new_day);
     }
 
     pub fn save(&mut self) -> Result<()> {
@@ -176,22 +161,23 @@ impl Todo {
         self.ensure_today();
 
         let task: Task = task_txt.parse()?;
-        let day_pos = self.last_day_pos().expect("Could not get last day pos");
 
-        // find section position in vec
-        let sections = &mut self.days[day_pos].sections;
+        if let Some(day) = self.days.get_mut(&today()) {
+            // find section position in vec
+            let sections = &mut day.sections;
 
-        let section_pos = sections
-            .iter()
-            .position(|sec| sec.name == section)
-            // create section if it doesnt exist
-            .unwrap_or_else(|| {
-                sections.push(Section::new(section));
-                sections.len() - 1
-            });
+            let section_pos = sections
+                .iter()
+                .position(|sec| sec.name == section)
+                // create section if it doesnt exist
+                .unwrap_or_else(|| {
+                    sections.push(Section::new(section));
+                    sections.len() - 1
+                });
 
-        // put task in section
-        self.days[day_pos].sections[section_pos].tasks.push(task);
+            // put task in section
+            day.sections[section_pos].tasks.push(task);
+        }
         Ok(())
     }
 }
@@ -200,7 +186,7 @@ impl str::FromStr for Todo {
     type Err = Box<dyn error::Error + Send + Sync>;
     fn from_str(s: &str) -> Result<Self> {
         let text = s.trim().to_string();
-        let mut days: Vec<Day> = Vec::new();
+        let mut days: HashMap<NaiveDate, Day> = HashMap::new();
         let day_iter = DayIterator::new(&text);
 
         let old_date = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap();
@@ -210,7 +196,7 @@ impl str::FromStr for Todo {
             if day.date > last_day.date {
                 last_day = day.clone();
             }
-            days.push(day);
+            days.insert(day.date, day);
         }
 
         Ok(Todo {
@@ -222,8 +208,15 @@ impl str::FromStr for Todo {
 
 impl fmt::Display for Todo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let days = self.days.iter().join("\n");
-        write!(f, "{days}")
+        let mut dates: Vec<&NaiveDate> = self.days.keys().collect();
+        dates.sort_by(|a, b| b.cmp(a));
+
+        let sorted_str_days: Vec<String> = dates
+            .iter()
+            .filter_map(|date| self.days.get(date).map(|day| day.to_string()))
+            .collect();
+
+        write!(f, "{}", sorted_str_days.join("\n"))
     }
 }
 
@@ -271,56 +264,62 @@ mod tests {
         );
         let path = file.path().to_path_buf();
         let expected = Todo {
-            days: vec![
-                Day {
-                    date: NaiveDate::from_ymd_opt(2024, 3, 6).unwrap(),
-                    sections: vec![
-                        Section {
-                            name: "Section 1".to_string(),
-                            tasks: vec![
-                                Task {
-                                    text: "task 1".to_string(),
-                                },
-                                Task {
-                                    text: "task 3".to_string(),
-                                },
-                                Task {
-                                    text: "task 2".to_string(),
-                                },
-                            ],
-                        },
-                        Section {
-                            name: "Done".to_string(),
-                            tasks: vec![],
-                        },
-                    ],
-                },
-                Day {
-                    date: NaiveDate::from_ymd_opt(2024, 3, 7).unwrap(),
-                    sections: vec![
-                        Section {
-                            name: "Section 2".to_string(),
-                            tasks: vec![
-                                Task {
-                                    text: "task 11".to_string(),
-                                },
-                                Task {
-                                    text: "task 31".to_string(),
-                                },
-                                Task {
-                                    text: "task 21".to_string(),
-                                },
-                            ],
-                        },
-                        Section {
-                            name: "Done".to_string(),
-                            tasks: vec![Task {
-                                text: "task 4".to_string(),
-                            }],
-                        },
-                    ],
-                },
-            ],
+            days: HashMap::from([
+                (
+                    NaiveDate::from_ymd_opt(2024, 3, 6).unwrap(),
+                    Day {
+                        date: NaiveDate::from_ymd_opt(2024, 3, 6).unwrap(),
+                        sections: vec![
+                            Section {
+                                name: "Section 1".to_string(),
+                                tasks: vec![
+                                    Task {
+                                        text: "task 1".to_string(),
+                                    },
+                                    Task {
+                                        text: "task 3".to_string(),
+                                    },
+                                    Task {
+                                        text: "task 2".to_string(),
+                                    },
+                                ],
+                            },
+                            Section {
+                                name: "Done".to_string(),
+                                tasks: vec![],
+                            },
+                        ],
+                    },
+                ),
+                (
+                    NaiveDate::from_ymd_opt(2024, 3, 7).unwrap(),
+                    Day {
+                        date: NaiveDate::from_ymd_opt(2024, 3, 7).unwrap(),
+                        sections: vec![
+                            Section {
+                                name: "Section 2".to_string(),
+                                tasks: vec![
+                                    Task {
+                                        text: "task 11".to_string(),
+                                    },
+                                    Task {
+                                        text: "task 31".to_string(),
+                                    },
+                                    Task {
+                                        text: "task 21".to_string(),
+                                    },
+                                ],
+                            },
+                            Section {
+                                name: "Done".to_string(),
+                                tasks: vec![Task {
+                                    text: "task 4".to_string(),
+                                }],
+                            },
+                        ],
+                    },
+                ),
+            ]),
             file_path: path.clone(),
         };
 
@@ -331,19 +330,19 @@ mod tests {
     #[test]
     fn save_todo() {
         let expected = indoc! {"
-            [2024-03-06]
-            Section 1
-            - task 1
-            - task 3
-            - task 2
-
-            Done
-
             [2024-03-07]
             Section 2
             - task 11
             - task 31
             - task 21
+
+            Done
+
+            [2024-03-06]
+            Section 1
+            - task 1
+            - task 3
+            - task 2
 
             Done
 
@@ -353,54 +352,60 @@ mod tests {
         let path = file.path();
         let mut todo = Todo {
             file_path: path.to_path_buf(),
-            days: vec![
-                Day {
-                    date: NaiveDate::from_ymd_opt(2024, 3, 6).unwrap(),
-                    sections: vec![
-                        Section {
-                            name: "Section 1".to_string(),
-                            tasks: vec![
-                                Task {
-                                    text: "task 1".to_string(),
-                                },
-                                Task {
-                                    text: "task 3".to_string(),
-                                },
-                                Task {
-                                    text: "task 2".to_string(),
-                                },
-                            ],
-                        },
-                        Section {
-                            name: "Done".to_string(),
-                            tasks: vec![],
-                        },
-                    ],
-                },
-                Day {
-                    date: NaiveDate::from_ymd_opt(2024, 3, 7).unwrap(),
-                    sections: vec![
-                        Section {
-                            name: "Section 2".to_string(),
-                            tasks: vec![
-                                Task {
-                                    text: "task 11".to_string(),
-                                },
-                                Task {
-                                    text: "task 31".to_string(),
-                                },
-                                Task {
-                                    text: "task 21".to_string(),
-                                },
-                            ],
-                        },
-                        Section {
-                            name: "Done".to_string(),
-                            tasks: vec![],
-                        },
-                    ],
-                },
-            ],
+            days: HashMap::from([
+                (
+                    NaiveDate::from_ymd_opt(2024, 3, 6).unwrap(),
+                    Day {
+                        date: NaiveDate::from_ymd_opt(2024, 3, 6).unwrap(),
+                        sections: vec![
+                            Section {
+                                name: "Section 1".to_string(),
+                                tasks: vec![
+                                    Task {
+                                        text: "task 1".to_string(),
+                                    },
+                                    Task {
+                                        text: "task 3".to_string(),
+                                    },
+                                    Task {
+                                        text: "task 2".to_string(),
+                                    },
+                                ],
+                            },
+                            Section {
+                                name: "Done".to_string(),
+                                tasks: vec![],
+                            },
+                        ],
+                    },
+                ),
+                (
+                    NaiveDate::from_ymd_opt(2024, 3, 7).unwrap(),
+                    Day {
+                        date: NaiveDate::from_ymd_opt(2024, 3, 7).unwrap(),
+                        sections: vec![
+                            Section {
+                                name: "Section 2".to_string(),
+                                tasks: vec![
+                                    Task {
+                                        text: "task 11".to_string(),
+                                    },
+                                    Task {
+                                        text: "task 31".to_string(),
+                                    },
+                                    Task {
+                                        text: "task 21".to_string(),
+                                    },
+                                ],
+                            },
+                            Section {
+                                name: "Done".to_string(),
+                                tasks: vec![],
+                            },
+                        ],
+                    },
+                ),
+            ]),
         };
 
         let _ = todo.save().expect("Unable to load file");
@@ -412,59 +417,65 @@ mod tests {
     #[test]
     fn add_task() {
         let base = Todo {
-            days: vec![Day {
-                date: today(),
-                sections: vec![
-                    Section {
-                        name: "Section 1".to_string(),
-                        tasks: vec![
-                            Task {
-                                text: "task 1".to_string(),
-                            },
-                            Task {
-                                text: "task 2".to_string(),
-                            },
-                            Task {
-                                text: "task 3".to_string(),
-                            },
-                        ],
-                    },
-                    Section {
-                        name: "Done".to_string(),
-                        tasks: vec![],
-                    },
-                ],
-            }],
+            days: HashMap::from([(
+                today(),
+                Day {
+                    date: today(),
+                    sections: vec![
+                        Section {
+                            name: "Section 1".to_string(),
+                            tasks: vec![
+                                Task {
+                                    text: "task 1".to_string(),
+                                },
+                                Task {
+                                    text: "task 2".to_string(),
+                                },
+                                Task {
+                                    text: "task 3".to_string(),
+                                },
+                            ],
+                        },
+                        Section {
+                            name: "Done".to_string(),
+                            tasks: vec![],
+                        },
+                    ],
+                },
+            )]),
             file_path: PathBuf::new(),
         };
 
         let expected = Todo {
-            days: vec![Day {
-                date: today(),
-                sections: vec![
-                    Section {
-                        name: "Section 1".to_string(),
-                        tasks: vec![
-                            Task {
-                                text: "task 1".to_string(),
-                            },
-                            Task {
-                                text: "task 2".to_string(),
-                            },
-                            Task {
-                                text: "task 3".to_string(),
-                            },
-                            Task {
-                                text: "added task".to_string(),
-                            },
-                        ],
-                    },
-                    Section {
-                        name: "Done".to_string(),
-                        tasks: vec![],
-                    },
-                ],
-            }],
+            days: HashMap::from([(
+                today(),
+                Day {
+                    date: today(),
+                    sections: vec![
+                        Section {
+                            name: "Section 1".to_string(),
+                            tasks: vec![
+                                Task {
+                                    text: "task 1".to_string(),
+                                },
+                                Task {
+                                    text: "task 2".to_string(),
+                                },
+                                Task {
+                                    text: "task 3".to_string(),
+                                },
+                                Task {
+                                    text: "added task".to_string(),
+                                },
+                            ],
+                        },
+                        Section {
+                            name: "Done".to_string(),
+                            tasks: vec![],
+                        },
+                    ],
+                },
+            )]),
             file_path: PathBuf::new(),
         };
 
@@ -476,63 +487,69 @@ mod tests {
     #[test]
     fn add_task_new_section() {
         let base = Todo {
-            days: vec![Day {
-                date: today(),
-                sections: vec![
-                    Section {
-                        name: "Section 1".to_string(),
-                        tasks: vec![
-                            Task {
-                                text: "task 1".to_string(),
-                            },
-                            Task {
-                                text: "task 2".to_string(),
-                            },
-                            Task {
-                                text: "task 3".to_string(),
-                            },
-                        ],
-                    },
-                    Section {
-                        name: "Done".to_string(),
-                        tasks: vec![],
-                    },
-                ],
-            }],
+            days: HashMap::from([(
+                today(),
+                Day {
+                    date: today(),
+                    sections: vec![
+                        Section {
+                            name: "Section 1".to_string(),
+                            tasks: vec![
+                                Task {
+                                    text: "task 1".to_string(),
+                                },
+                                Task {
+                                    text: "task 2".to_string(),
+                                },
+                                Task {
+                                    text: "task 3".to_string(),
+                                },
+                            ],
+                        },
+                        Section {
+                            name: "Done".to_string(),
+                            tasks: vec![],
+                        },
+                    ],
+                },
+            )]),
             file_path: PathBuf::new(),
         };
 
         let expected = Todo {
-            days: vec![Day {
-                date: today(),
-                sections: vec![
-                    Section {
-                        name: "Section 1".to_string(),
-                        tasks: vec![
-                            Task {
-                                text: "task 1".to_string(),
-                            },
-                            Task {
-                                text: "task 2".to_string(),
-                            },
-                            Task {
-                                text: "task 3".to_string(),
-                            },
-                        ],
-                    },
-                    Section {
-                        name: "Done".to_string(),
-                        tasks: vec![],
-                    },
-                    // new section is added to end of vec, not before Done
-                    Section {
-                        name: "New Section".to_string(),
-                        tasks: vec![Task {
-                            text: "added task".to_string(),
-                        }],
-                    },
-                ],
-            }],
+            days: HashMap::from([(
+                today(),
+                Day {
+                    date: today(),
+                    sections: vec![
+                        Section {
+                            name: "Section 1".to_string(),
+                            tasks: vec![
+                                Task {
+                                    text: "task 1".to_string(),
+                                },
+                                Task {
+                                    text: "task 2".to_string(),
+                                },
+                                Task {
+                                    text: "task 3".to_string(),
+                                },
+                            ],
+                        },
+                        Section {
+                            name: "Done".to_string(),
+                            tasks: vec![],
+                        },
+                        // new section is added to end of vec, not before Done
+                        Section {
+                            name: "New Section".to_string(),
+                            tasks: vec![Task {
+                                text: "added task".to_string(),
+                            }],
+                        },
+                    ],
+                },
+            )]),
             file_path: PathBuf::new(),
         };
 
@@ -544,33 +561,8 @@ mod tests {
     #[test]
     fn next_day() {
         let base = Todo {
-            days: vec![Day {
-                date: today() - ChronoDuration::days(1),
-                sections: vec![
-                    Section {
-                        name: "Section 1".to_string(),
-                        tasks: vec![
-                            Task {
-                                text: "task 1".to_string(),
-                            },
-                            Task {
-                                text: "task 2".to_string(),
-                            },
-                        ],
-                    },
-                    Section {
-                        name: "Done".to_string(),
-                        tasks: vec![Task {
-                            text: "task 3".to_string(),
-                        }],
-                    },
-                ],
-            }],
-            file_path: PathBuf::new(),
-        };
-
-        let expected = Todo {
-            days: vec![
+            days: HashMap::from([(
+                today() - ChronoDuration::days(1),
                 Day {
                     date: today() - ChronoDuration::days(1),
                     sections: vec![
@@ -593,27 +585,61 @@ mod tests {
                         },
                     ],
                 },
-                Day {
-                    date: today(),
-                    sections: vec![
-                        Section {
-                            name: "Section 1".to_string(),
-                            tasks: vec![
-                                Task {
-                                    text: "task 1".to_string(),
-                                },
-                                Task {
-                                    text: "task 2".to_string(),
-                                },
-                            ],
-                        },
-                        Section {
-                            name: "Done".to_string(),
-                            tasks: vec![],
-                        },
-                    ],
-                },
-            ],
+            )]),
+            file_path: PathBuf::new(),
+        };
+
+        let expected = Todo {
+            days: HashMap::from([
+                (
+                    today(),
+                    Day {
+                        date: today(),
+                        sections: vec![
+                            Section {
+                                name: "Section 1".to_string(),
+                                tasks: vec![
+                                    Task {
+                                        text: "task 1".to_string(),
+                                    },
+                                    Task {
+                                        text: "task 2".to_string(),
+                                    },
+                                ],
+                            },
+                            Section {
+                                name: "Done".to_string(),
+                                tasks: vec![],
+                            },
+                        ],
+                    },
+                ),
+                (
+                    today() - ChronoDuration::days(1),
+                    Day {
+                        date: today() - ChronoDuration::days(1),
+                        sections: vec![
+                            Section {
+                                name: "Section 1".to_string(),
+                                tasks: vec![
+                                    Task {
+                                        text: "task 1".to_string(),
+                                    },
+                                    Task {
+                                        text: "task 2".to_string(),
+                                    },
+                                ],
+                            },
+                            Section {
+                                name: "Done".to_string(),
+                                tasks: vec![Task {
+                                    text: "task 3".to_string(),
+                                }],
+                            },
+                        ],
+                    },
+                ),
+            ]),
             file_path: PathBuf::new(),
         };
 
