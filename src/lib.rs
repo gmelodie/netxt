@@ -79,8 +79,29 @@ impl Todo {
         )
     }
 
+    /// Creates new empty day if there isn't a day with today() as date.
+    /// ensure_today is idempotent, meaning it will do nothing if today already exists in days
+    fn ensure_today(&mut self) {
+        let new_day = match self.last_day() {
+            Some(last_day) => {
+                // days and today is created: do nothing
+                if last_day.date == today() {
+                    return;
+                }
+                // days but no today: copy last day
+                let mut clone_last_day = last_day.clone();
+                clone_last_day.date = today();
+                clone_last_day
+            }
+            // no days: create new empty day
+            None => Day::new(today()),
+        };
+        self.days.push(new_day);
+    }
+
     /// Creates new day with all tasks/sections from most recent day and cleared Done section
     /// next_day is idempotent, meaning it will do nothing if today already exists in days
+    #[deprecated]
     pub fn next_day(&mut self) {
         let mut new_day = match self.last_day() {
             Some(last_day) => {
@@ -152,7 +173,7 @@ impl Todo {
 
     pub fn add(&mut self, task_txt: &str, section: &str) -> Result<()> {
         // make sure current day exists
-        self.next_day();
+        self.ensure_today();
 
         let task: Task = task_txt.parse()?;
         let day_pos = self.last_day_pos().expect("Could not get last day pos");
@@ -207,6 +228,7 @@ impl fmt::Display for Todo {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
     use crate::section::Section;
